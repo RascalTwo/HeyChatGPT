@@ -1,0 +1,26 @@
+{
+  "name": "heychatgpt",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@picovoice/porcupine-node": "^2.1.7",
+    "@picovoice/porcupine-node-demo": "^2.1.7",
+    "@picovoice/pvrecorder-node": "^1.1.2",
+    "deepspeech": "^0.9.3",
+    "dotenv": "^16.0.3",
+    "memory-stream": "^1.0.0",
+    "node-record-lpcm16": "^1.0.1",
+    "playwright": "^1.30.0",
+    "puppeteer": "^19.7.1",
+    "puppeteer-extra": "^3.3.4",
+    "puppeteer-extra-plugin-stealth": "^2.11.1",
+    "sox-stream": "^2.0.6",
+    "wav": "^1.0.2"
+  }
+}
