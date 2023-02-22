@@ -3,26 +3,42 @@ function init() {
 
   let observer = null;
   let messageList = null;
-  let lastMutation = 0;
+  let lastMessage = null;
+  let lastSpokenIndex = 0;
+  function speakFromQueue() {
+    const totalText = lastMessage.textContent.trim();
+    if (speechSynthesis.speaking) return console.log('Already speaking');
+
+    const unspokenText = totalText.slice(lastSpokenIndex);
+    const textToSpeak = unspokenText.slice(0, 200).replace(/\w+$/, '');
+    console.log({ totalText, lastSpokenIndex, unspokenText, textToSpeak });
+    if (!textToSpeak) return;
+
+    console.log('Speaking', `"${textToSpeak}"`);
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.onend = function () {
+      console.log('Finished speaking', `"${textToSpeak}"`);
+      lastSpokenIndex += textToSpeak.length;
+      speakFromQueue();
+    };
+    speechSynthesis.speak(utterance);
+  }
+
   function stopTalking() {
     console.log('Stopping Talking');
     if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-    clearTimeout(lastMutation);
+    lastSpokenIndex = Infinity;
   }
-  function speakNewText() {
+  async function speakNewText() {
     const latestMessage = messageList.lastElementChild.previousElementSibling;
     if (latestMessage === messageList.firstElementChild) return;
-    stopTalking();
-
-    lastMutation = setTimeout(() => {
+    if (lastMessage !== latestMessage) {
+      lastMessage = latestMessage;
       stopTalking();
+      lastSpokenIndex = 0;
+    }
 
-      const text = latestMessage.textContent.trim();
-      console.log('Speaking', text);
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.speechSynthesis.speak(utterance);
-    }, 5000);
+    setTimeout(speakFromQueue, 2500);
   }
 
   setInterval(() => {
@@ -177,8 +193,13 @@ function init() {
     }
   }
 
+  recognition.addEventListener('end', () => {
+    if (window.r2IsUsing) recognition.start();
+  });
+
+  recognition.addEventListener('error', console.error);
+
   recognition.addEventListener('result', async function (event) {
-    console.log(event.results[event.results.length - 1][0].transcript);
     if (!inputElement) return;
 
     let interimTranscript = '';
