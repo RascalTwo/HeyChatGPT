@@ -47,18 +47,30 @@ async function waitForWake() {
   const handle = new Porcupine(accessKey, ['./Hey-Chat-G-P-T_en_linux_v2_1_0.ppn'], [0.5]);
 
   const frameLength = handle.frameLength;
-  const audioDeviceIndex = -1;
+  let audioDeviceIndex = PvRecorder.PvRecorder.getAudioDevices().indexOf('Blue Snowball Mono');
+  if (audioDeviceIndex === -1) process.stdout.write('Waiting for audio device');
+  while (audioDeviceIndex === -1) {
+    await delay(1000);
+    audioDeviceIndex = PvRecorder.PvRecorder.getAudioDevices().indexOf('Blue Snowball Mono');
+    process.stdout.write('.');
+  }
   const recorder = new PvRecorder.PvRecorder(audioDeviceIndex, frameLength);
   recorder.start();
+  console.log('Waiting for wake word');
 
   while (true) {
-    const pcm = await recorder.read();
-    let index = handle.process(pcm);
-    if (index === -1) continue;
-    recorder.release();
-    handle.release();
-    console.log('Woke up');
-    return;
+    try {
+      const pcm = await recorder.read();
+      let index = handle.process(pcm);
+      if (index === -1) continue;
+      recorder.release();
+      handle.release();
+      console.log('Woke up');
+      return;
+    } catch (e) {
+      console.error(e);
+      return waitForWake();
+    }
   }
 }
 
