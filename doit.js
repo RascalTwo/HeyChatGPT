@@ -10,50 +10,40 @@ puppeteer.use(StealthPlugin());
 
 const accessKey = process.env.ACCESS_KEY;
 
-//const handle = new Porcupine(accessKey, ['./Hey-Chat-G-P-T_en_linux_v2_1_0.ppn', BuiltinKeyword.COMPUTER], [0.5, 0.5]);
+const KEYWORDS = process.env.KEYWORDS?.split(',') ?? process.argv.split('--keywords=')[1]?.split(',');
+const KEYWORD_PATHS = process.env.KEYWORD_PATHS?.split(',') ?? process.argv.split('--keyword-paths=')[1]?.split(',');
+const AUDIO_DEVICE_NAME = process.env.AUDIO_DEVICE_NAME ?? process.argv.split('--audio-device-name=')[1];
 
-/*
-async function recordAudio() {
-  const frameLength = handle.frameLength;
-  const audioDeviceIndex = -1;
-  let recording = false;
-  const recorder = new PvRecorder.PvRecorder(audioDeviceIndex, frameLength);
-  recorder.start();
-  const stream = fs.createWriteStream('test.pcm', { flags: 'w' });
-  // Storing at 16Khz, 16bit, mono
+async function waitForWake(keywords, keywordPaths) {
+  const porcupineKeywords = [];
+  for (const keyword of keywords) {
+    if (!BuiltinKeyword[keyword]) throw new Error(`Invalid keyword: ${keyword}`);
 
-  while (true) {
-    const pcm = await recorder.read();
-    if (recording) {
-      stream.write(Buffer.from(pcm.buffer));
-    }
-    let index = handle.process(pcm);
-    if (index === -1) continue;
-
-    if (index == 0) {
-      console.log('Started');
-      recording = true;
-    } else {
-      console.log('Stopped');
-      recording = false;
-      stream.close();
-      recorder.release();
-      return;
-    }
+    porcupineKeywords.push(BuiltinKeyword[keyword]);
   }
-}
-*/
-async function waitForWake() {
-  const handle = new Porcupine(accessKey, ['./Hey-Chat-G-P-T_en_linux_v2_1_0.ppn'], [0.5]);
+  for (const path of keywordPaths) {
+    if (!fs.existsSync(path)) throw new Error(`Invalid keyword path: ${path}`);
 
+    porcupineKeywords.push(path);
+  }
+  if (!porcupineKeywords.length) {
+    if (process.platform === 'linux') porcupineKeywords.push('./ppns/Hey-Chat-G-P-T_en_linux_v2_1_0.ppn');
+    else porcupineKeywords.push(BuiltinKeyword.COMPUTER);
+  }
+  const sensitivities = new Array(porcupineKeywords.length).fill(0.5);
+  const handle = new Porcupine(accessKey, porcupineKeywords, sensitivities);
   const frameLength = handle.frameLength;
-  let audioDeviceIndex = PvRecorder.PvRecorder.getAudioDevices().indexOf('Blue Snowball Mono');
+
+
+  let audioDeviceIndex = PvRecorder.PvRecorder.getAudioDevices().indexOf(AUDIO_DEVICE_NAME);
   if (audioDeviceIndex === -1) process.stdout.write('Waiting for audio device');
   while (audioDeviceIndex === -1) {
     await delay(1000);
-    audioDeviceIndex = PvRecorder.PvRecorder.getAudioDevices().indexOf('Blue Snowball Mono');
+    audioDeviceIndex = PvRecorder.PvRecorder.getAudioDevices().indexOf(AUDIO_DEVICE_NAME);
     process.stdout.write('.');
   }
+
+
   const recorder = new PvRecorder.PvRecorder(audioDeviceIndex, frameLength);
   recorder.start();
   console.log('Waiting for wake word');
@@ -69,42 +59,9 @@ async function waitForWake() {
       return;
     } catch (e) {
       console.error(e);
-      return waitForWake();
+      return waitForWake(keywords, keywordPaths);
     }
   }
-}
-
-async function pcmToWav() {
-  const { exec } = require('child_process');
-  return new Promise((resolve, reject) => {
-    exec('ffmpeg -f s16le -ar 16k -ac 1 -i test.pcm test.wav -y', (err, stdout, stderr) => {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
-}
-
-function startProcessing() {
-  const { exec } = require('child_process');
-  exec(
-    'deepspeech --model deepspeech-0.9.3-models.pbmm --scorer deepspeech-0.9.3-models.scorer --audio test.wav --json',
-    (err, stdout, stderr) => {
-      if (err) {
-        // node couldn't execute the command
-        return;
-      }
-
-      // the *entire* stdout and stderr (buffered)
-      console.log(`stdout: ${stdout}`);
-      try {
-        const data = JSON.parse(stdout);
-        const sentence = data.transcripts[0].words.map(w => w.word).join(' ');
-        console.log(sentence);
-      } catch (e) {
-        console.log(stdout);
-      }
-    },
-  );
 }
 
 /**	@type {Browser} */
@@ -118,7 +75,7 @@ const NOOP = () => undefined;
 const USERNAME = process.env.CHAT_GPT_USERNAME;
 const PASSWORD = process.env.CHAT_GPT_PASSWORD;
 
-async function openUpChatGPT() {
+async function openUpChatGPT(summonOnly, beQuiet) {
   if (!browser) {
     console.log('Launching browser');
     browser = await puppeteer.launch({
@@ -157,7 +114,7 @@ async function openUpChatGPT() {
     }
 
     console.log('Injecting speech recognition');
-    await page.evaluate(client.init);
+    await page.evaluate(client.init, summonOnly, beQuiet);
   } else {
     const session = await page.target().createCDPSession();
     const { windowId } = await session.send('Browser.getWindowForTarget');
@@ -184,9 +141,9 @@ async function openUpChatGPT() {
   await page.waitForSelector('textarea[data-id]');
 }
 
-async function typeIntoChatGPT() {
-  await openUpChatGPT();
-  await page.evaluate(client.startRecognition);
+async function typeIntoChatGPT(summonOnly, beQuiet) {
+  await openUpChatGPT(summonOnly, beQuiet);
+  if (!summonOnly) await page.evaluate(client.startRecognition);
   console.log('Listening for speech');
   while (true) {
     await delay(1000);
@@ -201,12 +158,15 @@ async function typeIntoChatGPT() {
   console.log('Done listening for speech');
 }
 
-async function main() {
+async function main(summonOnly, beQuiet) {
+  if (!AUDIO_DEVICE_NAME) {
+    console.error('No audio device name specified');
+    console.log(PvRecorder.PvRecorder.getAudioDevices());
+    return;
+  }
   while (true) {
-    await waitForWake();
-    //await pcmToWav();
-    //await startProcessing();
-    await typeIntoChatGPT();
+    await waitForWake(KEYWORDS, KEYWORD_PATHS);
+    await typeIntoChatGPT(summonOnly, beQuiet);
   }
 }
-main().catch(console.error);
+main(process.argv.includes('--summon-only'), process.argv.includes('--be-quiet')).catch(console.error);

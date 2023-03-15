@@ -1,4 +1,4 @@
-function init() {
+function init(summonOnly, beQuiet) {
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   let observer = null;
@@ -41,18 +41,19 @@ function init() {
     setTimeout(speakFromQueue, 2500);
   }
 
-  setInterval(() => {
-    let newMessageList = document.querySelectorAll('div[class^="react-scroll-to-bottom"]')[1].children[0];
-    if (!newMessageList || newMessageList === messageList) return;
+  if (!beQuiet)
+    setInterval(() => {
+      let newMessageList = document.querySelectorAll('div[class^="react-scroll-to-bottom"]')[1].children[0];
+      if (!newMessageList || newMessageList === messageList) return;
 
-    if (messageList) observer.disconnect();
-    if (observer) observer.disconnect();
+      if (messageList) observer.disconnect();
+      if (observer) observer.disconnect();
 
-    messageList = newMessageList;
-    observer = new MutationObserver(speakNewText);
-    observer.observe(newMessageList, { childList: true, subtree: true });
-    speakNewText();
-  }, 1000);
+      messageList = newMessageList;
+      observer = new MutationObserver(speakNewText);
+      observer.observe(newMessageList, { childList: true, subtree: true });
+      speakNewText();
+    }, 1000);
 
   let inputElement = null;
   const inputListener = event => {
@@ -155,6 +156,13 @@ function init() {
         },
       ],
       [
+        /exclamation mark$/i,
+        function (cmd) {
+          this.removeCMD(cmd);
+          this.updateValue(value => value + '! ');
+        },
+      ],
+      [
         /new line$/i,
         function (cmd) {
           this.removeCMD(cmd);
@@ -163,6 +171,13 @@ function init() {
       ],
       [
         /dot$/i,
+        function (cmd) {
+          this.removeCMD(cmd);
+          this.updateValue(value => value + '. ');
+        },
+      ],
+      [
+        /period$/i,
         function (cmd) {
           this.removeCMD(cmd);
           this.updateValue(value => value + '. ');
@@ -194,7 +209,7 @@ function init() {
   }
 
   recognition.addEventListener('end', () => {
-    if (window.r2IsUsing) recognition.start();
+    if (window.r2IsUsing && !summonOnly) recognition.start();
   });
 
   recognition.addEventListener('error', console.error);
