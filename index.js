@@ -10,9 +10,9 @@ puppeteer.use(StealthPlugin());
 
 const accessKey = process.env.ACCESS_KEY;
 
-const KEYWORDS = process.env.KEYWORDS?.split(',') ?? process.argv.split('--keywords=')[1]?.split(',');
-const KEYWORD_PATHS = process.env.KEYWORD_PATHS?.split(',') ?? process.argv.split('--keyword-paths=')[1]?.split(',');
-const AUDIO_DEVICE_NAME = process.env.AUDIO_DEVICE_NAME ?? process.argv.split('--audio-device-name=')[1];
+const KEYWORDS = (process.env.KEYWORDS?.split(',') ?? process.argv.find(arg => arg.startsWith('--keywords'))?.split('--keywords=')[1]?.split(',')).filter(Boolean);
+const KEYWORD_PATHS = (process.env.KEYWORD_PATHS?.split(',') ?? process.argv.find(arg => arg.startsWith('--keyword-paths'))?.split('--keyword-paths=')[1]?.split(',')).filter(Boolean);
+const AUDIO_DEVICE_NAME = process.env.AUDIO_DEVICE_NAME ?? process.argv.find(arg => arg.startsWith('--audio-device-name'))?.split('--audio-device-name=')[1];
 
 async function waitForWake(keywords, keywordPaths) {
   const porcupineKeywords = [];
